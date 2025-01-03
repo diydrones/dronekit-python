@@ -96,13 +96,13 @@ def altitude_controller(target_altitude : float):
         print("Closing vehicle object")
         vehicle.close()
 
-        # Plot the error data
+        # Save the error data plot
         time_data = [i / PID_SAMPLE_RATE for i in range(len(error_data))]
         plt.plot(time_data, error_data)
         plt.xlabel('Time (s)')
-        plt.ylabel('Error')
+        plt.ylabel('Error [m]')
         plt.title('Altitude Control Error')
-        plt.show()
+        plt.savefig('altitude_control_error.png')
 
 
 def send_attitude_target(roll_angle = 0.0, pitch_angle = 0.0,
