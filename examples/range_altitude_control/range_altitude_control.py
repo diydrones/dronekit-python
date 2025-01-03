@@ -70,7 +70,7 @@ def altitude_controller(target_altitude : float):
         time.sleep(1)
 
     print("Taking off!")
-    pid_controller = PID(0.20, 0.1, 0.08, setpoint=target_altitude, sample_time=1/PID_SAMPLE_RATE, output_limits=(0, 1))
+    pid_controller = PID(0.10, 0.05, 0.04, setpoint=target_altitude, sample_time=1/PID_SAMPLE_RATE, output_limits=(0, 1))
 
     range_zeroing_offset = vehicle.rangefinder.distance
 
