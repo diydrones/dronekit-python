@@ -14,6 +14,9 @@ Caution: A lot of unexpected behaviors may occur in GUIDED_NOGPS mode.
 Tested in Python 2.7.10
 
 """
+import collections
+import collections.abc
+collections.MutableMapping = collections.abc.MutableMapping
 
 from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
 from pymavlink import mavutil # Needed for command message definitions
