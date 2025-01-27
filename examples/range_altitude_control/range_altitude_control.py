@@ -86,8 +86,10 @@ def altitude_controller(target_altitude : float):
             # Compute and set the thrust value from the PID controller
             thrust = pid_controller(current_range - range_zeroing_offset)
             print(f"Thrust: {thrust}\n Error: {error}\n")
-            set_attitude(thrust=thrust)
+            # set_attitude(thrust=thrust)
+            set_attitude(thrust=0.5)
             time.sleep(1/PID_SAMPLE_RATE)
+
     except KeyboardInterrupt:
         # Land the drone when the user interrupts the program
         print("Emergency Landing...")
@@ -117,7 +119,7 @@ def send_attitude_target(roll_angle = 0.0, pitch_angle = 0.0,
     """
     if yaw_angle is None:
         # this value may be unused by the vehicle, depending on use_yaw_rate
-        yaw_angle = vehicle.attitude.yaw
+        yaw_angle = math.degrees(vehicle.attitude.yaw)
     # Thrust >  0.5: Ascend
     # Thrust == 0.5: Hold the altitude
     # Thrust <  0.5: Descend
