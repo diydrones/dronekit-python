@@ -2,26 +2,33 @@
 
 """
 
-set_attitude_target.py: (Copter Only)
+range_altitude_controller.py: (Copter Only)
 
-This example shows how to move/direct Copter and send commands
- in GUIDED_NOGPS mode using DroneKit Python.
+This example shows a PID controller regulating the altitude of Copter using a downward-facing rangefinder sensor.
 
 Caution: A lot of unexpected behaviors may occur in GUIDED_NOGPS mode.
         Always watch the drone movement, and make sure that you are in dangerless environment.
         Land the drone as soon as possible when it shows any unexpected behavior.
 
-Tested in Python 2.7.10
+Tested in Python 3.12.3
 
 """
 import collections
 import collections.abc
-collections.MutableMapping = collections.abc.MutableMapping
 
-from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
+from simple_pid import PID
+
+# The collections module has been reorganized in Python 3.12 and the abstract base
+# classes have been moved to the collections.abc module. This line is necessary to
+# fix a bug in importing the MutableMapping class in `dronekit`.
+
+collections.MutableMapping = collections.abc.MutableMapping
+from dronekit import connect, VehicleMode
 from pymavlink import mavutil # Needed for command message definitions
 import time
 import math
+
+import matplotlib.pyplot as plt
 
 # Set up option parsing to get connection string
 import argparse
@@ -39,28 +46,18 @@ if not connection_string:
     sitl = dronekit_sitl.start_default()
     connection_string = sitl.connection_string()
 
+HOVER_THRUST = 0.4
 
 # Connect to the Vehicle
 print('Connecting to vehicle on: %s' % connection_string)
-vehicle = connect(connection_string, wait_ready=True)
+vehicle = connect(connection_string, wait_ready=True, timeout=80)
 
-def arm_and_takeoff_nogps(aTargetAltitude):
+PID_SAMPLE_RATE = 50 # [Hz]
+
+def altitude_controller(target_altitude : float):
     """
     Arms vehicle and fly to aTargetAltitude without GPS data.
     """
-
-    ##### CONSTANTS #####
-    DEFAULT_TAKEOFF_THRUST = 0.7
-    SMOOTH_TAKEOFF_THRUST = 0.6
-
-    print("Basic pre-arm checks")
-    # Don't let the user try to arm until autopilot is ready
-    # If you need to disable the arming check,
-    # just comment it with your own responsibility.
-    while not vehicle.is_armable:
-        print(" Waiting for vehicle to initialise...")
-        time.sleep(1)
-
 
     print("Arming motors")
     # Copter should arm in GUIDED_NOGPS mode
@@ -73,19 +70,41 @@ def arm_and_takeoff_nogps(aTargetAltitude):
         time.sleep(1)
 
     print("Taking off!")
+    pid_controller = PID(0.10, 0.05, 0.04, setpoint=target_altitude, sample_time=1/PID_SAMPLE_RATE, output_limits=(0, 1))
 
-    thrust = DEFAULT_TAKEOFF_THRUST
-    while True:
-        current_altitude = vehicle.location.global_relative_frame.alt
-        print(" Altitude: %f  Desired: %f" %
-              (current_altitude, aTargetAltitude))
-        if current_altitude >= aTargetAltitude*0.95: # Trigger just below target alt.
-            print("Reached target altitude")
-            break
-        elif current_altitude >= aTargetAltitude*0.6:
-            thrust = SMOOTH_TAKEOFF_THRUST
-        set_attitude(thrust = thrust)
-        time.sleep(0.2)
+    range_zeroing_offset = vehicle.rangefinder.distance
+
+    error_data = []
+    try:
+        while True:
+            # Calculate the altitude error using the rangefinder sensor
+            current_range = vehicle.rangefinder.distance
+            altitude = current_range - range_zeroing_offset
+            error = pid_controller.setpoint - altitude
+            error_data.append(error)
+
+            # Compute and set the thrust value from the PID controller
+            thrust = pid_controller(current_range - range_zeroing_offset)
+            print(f"Thrust: {thrust}\n Error: {error}\n")
+            set_attitude(thrust=thrust)
+            time.sleep(1/PID_SAMPLE_RATE)
+
+    except KeyboardInterrupt:
+        # Land the drone when the user interrupts the program
+        print("Emergency Landing...")
+        vehicle.mode = VehicleMode("LAND")
+        time.sleep(1)
+        print("Closing vehicle object")
+        vehicle.close()
+
+        # Save the error data plot
+        time_data = [i / PID_SAMPLE_RATE for i in range(len(error_data))]
+        plt.plot(time_data, error_data)
+        plt.xlabel('Time (s)')
+        plt.ylabel('Error [m]')
+        plt.title('Altitude Control Error')
+        plt.savefig('altitude_control_error.png')
+
 
 def send_attitude_target(roll_angle = 0.0, pitch_angle = 0.0,
                          yaw_angle = None, yaw_rate = 0.0, use_yaw_rate = False,
@@ -99,7 +118,7 @@ def send_attitude_target(roll_angle = 0.0, pitch_angle = 0.0,
     """
     if yaw_angle is None:
         # this value may be unused by the vehicle, depending on use_yaw_rate
-        yaw_angle = vehicle.attitude.yaw
+        yaw_angle = math.degrees(vehicle.attitude.yaw)
     # Thrust >  0.5: Ascend
     # Thrust == 0.5: Hold the altitude
     # Thrust <  0.5: Descend
@@ -158,27 +177,9 @@ def to_quaternion(roll = 0.0, pitch = 0.0, yaw = 0.0):
 
     return [w, x, y, z]
 
-# Take off 2.5m in GUIDED_NOGPS mode.
-arm_and_takeoff_nogps(2.5)
-
-# Hold the position for 3 seconds.
-print("Hold position for 3 seconds")
-set_attitude(duration = 3)
-
-# Uncomment the lines below for testing roll angle and yaw rate.
-# Make sure that there is enough space for testing this.
-
-# set_attitude(roll_angle = 1, thrust = 0.5, duration = 3)
-# set_attitude(yaw_rate = 30, thrust = 0.5, duration = 3)
-
-# Move the drone forward and backward.
-# Note that it will be in front of original position due to inertia.
-print("Move forward")
-set_attitude(pitch_angle = -5, thrust = 0.5, duration = 3.21)
-
-print("Move backward")
-set_attitude(pitch_angle = 5, thrust = 0.5, duration = 3)
-
+# Take off in GUIDED_NOGPS mode.
+print("Hold position ")
+altitude_controller(1)
 
 print("Setting LAND mode...")
 vehicle.mode = VehicleMode("LAND")
