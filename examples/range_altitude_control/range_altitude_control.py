@@ -86,8 +86,7 @@ def altitude_controller(target_altitude : float):
             # Compute and set the thrust value from the PID controller
             thrust = pid_controller(current_range - range_zeroing_offset)
             print(f"Thrust: {thrust}\n Error: {error}\n")
-            # set_attitude(thrust=thrust)
-            set_attitude(thrust=0.5)
+            set_attitude(thrust=thrust)
             time.sleep(1/PID_SAMPLE_RATE)
 
     except KeyboardInterrupt:
